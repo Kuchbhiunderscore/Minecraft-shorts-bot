@@ -1,0 +1,32 @@
+name: Build & Render LoreJump Shorts
+
+on:
+  schedule:
+    # Runs daily at 08:00 IST (02:30 UTC)
+    - cron: "30 2 * * *"
+  workflow_dispatch:        # lets you trigger manually from GitHub UI
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.11"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install edge-tts
+
+    # FFmpeg is pre-installed on ubuntu-latest, but ensure it’s there
+    - name: Confirm FFmpeg
+      run: ffmpeg -version
+
+    - name: Run automation script
+      run: python build.py
