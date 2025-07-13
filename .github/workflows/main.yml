@@ -1,14 +1,19 @@
 name: Auto Upload Short
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
 
       - name: Set up Python
@@ -16,16 +21,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
-          pip install --upgrade pip
-          pip install google-api-python-client google-auth edge-tts
+          python -m pip install --upgrade pip
+          pip install google-api-python-client google-auth google-auth-oauthlib requests
 
-      - name: Run build script
-        env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+      - name: Install edge-tts and ffmpeg
+        run: |
+          pip install edge-tts
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run builder
         run: python build.py
