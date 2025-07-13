@@ -53,11 +53,15 @@ def ssml(lines):
     return f"<speak><prosody rate='85%' pitch='+3%'>{inner}</prosody></speak>"
 
 def tts(ssml_text, path):
+    ssml_path = "temp_ssml.txt"
+    with open(ssml_path, "w", encoding="utf-8") as f:
+        f.write(ssml_text)
     subprocess.run([
         "edge-tts",
-        "--ssml", ssml_text,
+        "--file", ssml_path,
         "--write-media", path
     ], check=True)
+    os.remove(ssml_path)
 
 def audio_len(path):
     cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path]
