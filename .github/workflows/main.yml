@@ -2,7 +2,7 @@ name: Build & Render LoreJump Shorts
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Daily at 07:30 AM IST (02:00 UTC)
+    - cron: '0 2 * * *'      # daily at 07:30 IST (02:00 UTC)
   workflow_dispatch:
 
 jobs:
@@ -18,13 +18,19 @@ jobs:
         with:
           python-version: '3.10'
 
+      # ----------------------------
+      # 👇 THIS is the key block
+      # ----------------------------
       - name: Install dependencies
-  run: |
-    sudo apt-get update
-    sudo apt-get install ffmpeg -y
-    pip install openai pillow google-api-python-client google-auth google-auth-oauthlib edge-tts google-auth google-auth-oauthlib edge-tts
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          pip install openai pillow google-api-python-client \
+                     google-auth google-auth-oauthlib edge-tts
+      # ----------------------------
 
       - name: Run automation script
         run: python build.py
         env:
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
