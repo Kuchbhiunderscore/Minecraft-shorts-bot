@@ -17,36 +17,44 @@ PROMPT_FILE = "prompt.txt"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # === 1. STORY GENERATION ===
-def generate_story(part):
+import requests, os, json, textwrap
+
+def generate_story(part: int) -> str:
     base_prompt = (
         "Write a short, emotional Minecraft story in 2 parts. "
-        "Each part must be about 200 words. Add a twist or cliffhanger in Part 1. "
-        "Do not repeat Part 1 in Part 2. Use emotional and immersive language."
+        "Each part about 200 words. Add a cliff-hanger in Part 1; "
+        "resolve it with emotion in Part 2. Do not repeat Part 1 in Part 2."
     )
-
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
-        part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
-        prompt = f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
+        with open(f"{OUT_DIR}/part1_story.txt") as fp:
+            p1 = fp.read()
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{p1}\n\nNow give me Part 2:"
 
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-    if not GEMINI_API_KEY:
-        raise Exception("❌ Missing GEMINI_API_KEY environment variable!")
+    # free PaLM endpoint
+    key = os.environ["GEMINI_API_KEY"]
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/text-bison-001:"
+        f"generateText?key={key}"
+    )
+    resp = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"prompt": {"text": prompt}},
+        timeout=60,
+    )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta1/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    payload = { "contents": [{ "parts": [{ "text": prompt }] }] }
+    if resp.headers.get("content-type", "").startswith("application/json"):
+        data = resp.json()
+        story = data["candidates"][0]["output"].strip()
+    else:
+        print("❌ Non-JSON response ", resp.status_code)
+        print(textwrap.shorten(resp.text, 300))
+        raise RuntimeError("PaLM API returned non-JSON error page")
 
-    response = requests.post(url, headers=headers, json=payload)
-    result = response.json()
-
-    try:
-        story = result["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        raise Exception(f"❌ Error getting story: {json.dumps(result)}")
-
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
+    out = f"{OUT_DIR}/part{part}_story.txt"
+    with open(out, "w") as f:
         f.write(story)
     return story
 
