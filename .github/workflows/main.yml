@@ -19,12 +19,12 @@ jobs:
       - name: Install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
-      - name: Install dependencies
+      - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install google-api-python-client google-auth edge-tts
 
-      - name: Run script
+      - name: Run build script
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
