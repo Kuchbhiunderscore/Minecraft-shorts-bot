@@ -1,5 +1,3 @@
-✅ build.py
-
 import os
 import random
 import subprocess
