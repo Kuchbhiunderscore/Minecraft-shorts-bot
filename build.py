@@ -49,7 +49,38 @@ def generate_story(part: int) -> str:
             p1 = fp.read()
         prompt = f"{base_prompt}\n\nHere is Part 1:\n{p1}\n\nNow give me Part 2:"
 
-    story = _call_palm(prompt)
+    story = def _call_palm(prompt: str) -> str:
+    key = os.environ["GEMINI_API_KEY"]
+    base = "https://generativelanguage.googleapis.com"
+    paths = [
+        "v1beta/models/text-bison-001:generateText",
+        "v1beta2/models/text-bison-001:generateText",
+        "v1beta/models/text-bison-001:generateContent",
+    ]
+    headers = {"Content-Type": "application/json"}
+    body_txt = {"prompt": {"text": prompt}}
+    body_cnt = {"contents": [{"parts": [{"text": prompt}]}]}
+
+    for p in paths:
+        url = f"{base}/{p}?key={key}"
+        body = body_txt if "generateText" in p else body_cnt
+        r = requests.post(url, headers=headers, json=body, timeout=60)
+        if "application/json" in r.headers.get("content-type", ""):
+            data = r.json()
+            if "candidates" in data:
+                try:
+                    # generateText ➜ .output   |  generateContent ➜ .content.parts[0].text
+                    if "output" in data["candidates"][0]:
+                        return data["candidates"][0]["output"].strip()
+                    else:
+                        return (
+                            data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                        )
+                except Exception:
+                    pass  # malformed, try next path
+        # log (first 100 chars) for visibility
+        print(f"❌ {p} →", r.status_code, r.text[:100])
+    raise RuntimeError("PaLM API: no working endpoint found for this account")
     out = f"{OUT_DIR}/part{part}_story.txt"
     with open(out, "w") as fp:
         fp.write(story)
