@@ -19,31 +19,36 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # === 1. STORY GENERATION (placeholder text right now) ===
 
-import openai
-from openai import OpenAI
-
-client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+import requests
+import json
 
 def generate_story(part):
-    base_prompt = "Write a short but emotional Minecraft story in 2 parts. Each part should be less than 400 characters. Add a twist or cliffhanger in Part 1."
+    base_prompt = (
+        "Write a short, emotional Minecraft story in 2 parts. "
+        "Each part must be under 400 characters. Add a twist or cliffhanger in Part 1."
+    )
 
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
-        prompt = f"{base_prompt}\n\nHere is Part 1:\n{open('output/part1_story.txt').read()}\n\nNow write Part 2:"
+        part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
 
-    response = client.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-    story = response.choices[0].message.content.strip()
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
-        f.write(story)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
 
-    return story
+    response = requests.post(url, headers=headers, json=payload)
+    result = response.json()
+
+    try:
+        story = result['candidates'][0]['content']['parts'][0]['text'].strip
 # === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
 
 def tts(text: str, outfile: str):
