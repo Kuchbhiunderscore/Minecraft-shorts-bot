@@ -2,7 +2,7 @@ name: Build & Render LoreJump Shorts
 
 on:
   schedule:
-    - cron: '0 2 * * *'      # daily at 07:30 IST (02:00 UTC)
+    - cron: '0 2 * * *'  # every day at 07:30 IST
   workflow_dispatch:
 
 jobs:
@@ -22,8 +22,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          pip install openai pillow google-api-python-client \
-                      google-auth google-auth-oauthlib edge-tts requests
+          pip install google-api-python-client google-auth google-auth-oauthlib requests edge-tts
 
       - name: Run automation script
         run: python build.py
