@@ -18,19 +18,15 @@ jobs:
         with:
           python-version: '3.10'
 
-      # ----------------------------
-      # 👇 THIS is the key block
-      # ----------------------------
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
           pip install openai pillow google-api-python-client \
-                     google-auth google-auth-oauthlib edge-tts
-      # ----------------------------
+                      google-auth google-auth-oauthlib edge-tts requests
 
       - name: Run automation script
         run: python build.py
         env:
-  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-  TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+          TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
