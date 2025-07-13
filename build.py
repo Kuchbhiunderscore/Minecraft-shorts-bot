@@ -1,37 +1,34 @@
 import os
 import random
 import subprocess
-import json
-import base64
+import json, base64
 from datetime import datetime
+
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 import requests
 
-# === CONFIGURATION ===
+# === CONFIG ===
 MUSIC = "music1.mp3"
 PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]
 OUT_DIR = "output"
-PROMPT_FILE = "prompt.txt"
 
 # === PREP ===
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# === 1. STORY GENERATION (GEMINI) ===
+# === 1. STORY GENERATION ===
 def generate_story(part):
     base_prompt = (
         "Write a short, emotional Minecraft story in 2 parts. "
-        "Each part must be under 400 characters. Add a twist or cliffhanger in Part 1."
+        "Each part must be around 1000 characters. Use simple language. "
+        "Add a strong twist or cliffhanger in Part 1. Make it intense and immersive."
     )
 
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
-        try:
-            part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
-        except FileNotFoundError:
-            part1_text = "Steve was walking in the forest..."
+        part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
         prompt = f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
 
     GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
@@ -40,7 +37,11 @@ def generate_story(part):
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
     headers = {"Content-Type": "application/json"}
-    payload = {"contents": [{"parts": [{"text": prompt}]}]}
+    payload = {
+        "contents": [{
+            "parts": [{"text": prompt}]
+        }]
+    }
 
     response = requests.post(url, headers=headers, json=payload)
     result = response.json()
@@ -48,16 +49,15 @@ def generate_story(part):
     try:
         story = result['candidates'][0]['content']['parts'][0]['text'].strip()
     except Exception as e:
-        print("❌ Error parsing Gemini response:", e)
-        print("🔁 Full response:", json.dumps(result, indent=2))
-        story = "Steve was walking in the forest... then everything changed."
+        print("❌ Error getting story:", result)
+        raise
 
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
+    out_path = f"{OUT_DIR}/part{part}_story.txt"
+    with open(out_path, "w") as f:
         f.write(story)
-
     return story
 
-# === 2. TEXT-TO-SPEECH (Edge TTS) ===
+# === 2. TEXT-TO-SPEECH ===
 def tts(text: str, outfile: str):
     subprocess.run([
         "edge-tts",
@@ -75,20 +75,20 @@ def render_video(part: int) -> str:
 
     with open(story_path, "r") as f:
         text = f.read()
-
     tts(text, audio_path)
 
+    # Loop parkour clip to match voice+music duration
     subprocess.run([
         "ffmpeg", "-y",
+        "-stream_loop", "-1",
         "-i", clip,
         "-i", audio_path,
         "-i", MUSIC,
-        "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=first[a]",
+        "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=longest[a]",
         "-map", "0:v", "-map", "[a]",
         "-shortest",
         output_path,
     ], check=True)
-
     return output_path
 
 # === 4. YOUTUBE UPLOAD ===
@@ -115,28 +115,28 @@ def upload_video(path: str, title: str, descr: str, tags: list[str]):
     resp = request.execute()
     print("✅ Uploaded to YouTube:", resp["id"])
 
-# === 5. MAIN PIPELINE ===
+# === MAIN PIPELINE ===
 def main():
     print("🧠 Generating stories …")
     generate_story(1)
     generate_story(2)
 
-    print("🎬 Rendering Part 1 …")
+    print("🎬 Rendering Part 1 …")
     part1_mp4 = render_video(1)
-    print("⬆️  Uploading Part 1 …")
+    print("⬆️  Uploading Part 1 …")
     upload_video(
         part1_mp4,
-        "LoreJump • Part 1",
-        "Auto-uploaded via LoreJumpBot. Part 2 follows!",
+        "LoreJump • Part 1",
+        "Auto‑uploaded via LoreJumpBot. Part 2 follows!",
         ["minecraft", "shorts", "story", "parkour"],
     )
 
-    print("🎬 Rendering Part 2 …")
+    print("🎬 Rendering Part 2 …")
     part2_mp4 = render_video(2)
-    print("⬆️  Uploading Part 2 …")
+    print("⬆️  Uploading Part 2 …")
     upload_video(
         part2_mp4,
-        "LoreJump • Part 2",
+        "LoreJump • Part 2",
         "Thanks for watching Part 2!",
         ["minecraft", "shorts", "story", "parkour"],
     )
