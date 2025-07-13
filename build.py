@@ -76,3 +76,34 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
+import json, base64, os
+
+def upload_video(path, title, descr, tags):
+    token_json = base64.b64decode(os.environ["TOKEN_JSON"]).decode()
+    creds = Credentials.from_authorized_user_info(
+        json.loads(token_json),
+        ["https://www.googleapis.com/auth/youtube.upload"]
+    )
+    youtube = build("youtube", "v3", credentials=creds)
+
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body={
+            "snippet": {
+                "title": title,
+                "description": descr,
+                "tags": tags,
+                "categoryId": "20"
+            },
+            "status": {
+                "privacyStatus": "public"
+            }
+        },
+        media_body=MediaFileUpload(path)
+    )
+    response = request.execute()
+    print("✅ Uploaded to YouTube:", response["id"])
