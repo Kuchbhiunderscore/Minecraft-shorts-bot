@@ -70,7 +70,8 @@ def generate_story(part: int) -> list[str]:
 # ── 2. TTS with SSML (fixed flag) ─────────────────────────
 def ssml(lines: list[str]) -> str:
     blocks = [f"<p>{line}</p>" for line in lines]
-    return f"<speak><prosody rate='85%' pitch='+3%'>{'<break time=\"600ms\"/>'.join(blocks)}</prosody></speak>"
+    break_tag = '<break time="600ms"/>'
+return f"<speak><prosody rate='85%' pitch='+3%'>{break_tag.join(blocks)}</prosody></speak>"
 
 
 def tts(ssml_str: str, out_mp3: str):
