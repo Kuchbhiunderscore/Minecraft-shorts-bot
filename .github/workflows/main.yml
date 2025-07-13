@@ -29,4 +29,6 @@ jobs:
         sudo apt install -y ffmpeg
 
     - name: Run automation script
-      run: python build.py
+  env:
+    TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
+  run: python build.py
