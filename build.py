@@ -1,201 +1,38 @@
-import os
-import random
-import subprocess
-import json
-import base64
-from datetime import datetime
+import os import random import subprocess import json import base64 from datetime import datetime from google.oauth2.credentials import Credentials from googleapiclient.discovery import build as youtube_build from googleapiclient.http import MediaFileUpload import requests
 
-import requests
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
+Constants
 
-# ── CONFIG ──────────────────────────────────────────────────────────────
-OUT_DIR = "output"
+OUT_DIR = "output" MUSIC_FILE = "music1.mp3" VIDEO_FILE = "parkour3.mp4" VOICES = ["en-US-JennyNeural", "en-US-GuyNeural", "en-GB-SoniaNeural"]
+
 os.makedirs(OUT_DIR, exist_ok=True)
 
-MUSIC = "music1.mp3"                       # royalty-free bg music
-PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]
+def generate_emotional_story(): prompt = ( "Write a short emotional story in spoken English style (not written like code). " "Use natural, expressive language. It should be dramatic or touching and fit in a 40-second narration. " "Topics can include family, siblings, rich vs poor, bullying, or unexpected kindness. " "Avoid mentioning Minecraft, technology, or programming. Keep it cinematic." ) try: response = requests.post( "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.2", headers={"Authorization": f"Bearer {os.getenv('HUGGINGFACE_TOKEN')}"}, json={"inputs": prompt}, timeout=60 ) response.raise_for_status() return response.json()[0]['generated_text'] except Exception as e: print(f"⚠️  Gemini failed, using fallback.\n{e}") return ( "Sarah lived with her little brother Max. They barely had anything, but shared everything. " "One day, Max gave Sarah his only toy so she could smile again. Sarah cried—not because she was sad, " "but because love had no price." )
 
-CHAR_VOICES = {                           # edge-tts voice map
-    "Dad": "en-US-GuyNeural",
-    "Mom": "en-US-JennyNeural",
-    "Brother": "en-US-DavisNeural",
-    "Sister": "en-US-AriaNeural",
-    "Narrator": "en-US-EmmaNeural"
-}
+def split_lines(story): return [(random.choice(VOICES), line.strip()) for line in story.strip().split('.') if line.strip()]
 
-# ── 1. STORY GENERATION ─────────────────────────────────────────────────
-def get_story() -> str:
-    prompt = (
-        "Write an emotional or funny short story (40–60 seconds when spoken). "
-        "Use clear character labels: Dad:, Mom:, Brother:, Sister:, Narrator:. "
-        "Keep it under 600 characters. No Minecraft. Real-life themes — "
-        "family, rich-poor, friendships, sad or humorous twists."
-    )
-    key = os.getenv("GEMINI_API_KEY")
-    if not key:
-        print("⚠️  No GEMINI_API_KEY; using fallback story.")
-        return fallback_story()
-    url = (
-        "https://generativelanguage.googleapis.com/"
-        f"v1beta/models/gemini-pro:generateContent?key={key}"
-    )
-    res = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}]},
-        timeout=60,
-    )
-    try:
-        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
-    except Exception:
-        print("⚠️  Gemini failed, using fallback.")
-        return fallback_story()
+def ssml(lines): blocks = [f"<voice name='{voice}'><p>{line}</p></voice><break time='600ms'/>" for voice, line in lines] return f"<speak><prosody rate='85%' pitch='+3%'>{''.join(blocks)}</prosody></speak>"
 
+def tts(ssml_str, output_path): subprocess.run([ "edge-tts", "--ssml", ssml_str, "--write-media", output_path ], check=True)
 
-def fallback_story() -> str:
-    return (
-        "Dad: Why are you late?\n"
-        "Son: I gave my lunch to a homeless man.\n"
-        "Dad: Proud of you, kid.\n"
-        "Narrator: Sometimes missing a meal feeds the soul."
-    )
+def audio_len(audio_path): cmd = [ "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", audio_path ] return float(subprocess.check_output(cmd).decode().strip())
 
+def render(video_path, voice_path, music_path, output_path): cmd = [ "ffmpeg", "-y", "-i", video_path, "-i", voice_path, "-i", music_path, "-filter_complex", "[1:a]volume=1.0[a1]; [2:a]volume=0.05[a2]; [a1][a2]amix=inputs=2:duration=first[aout]", "-map", "0:v", "-map", "[aout]", "-c:v", "libx264", "-c:a", "aac", "-strict", "experimental", output_path ] subprocess.run(cmd, check=True)
 
-# ── 2. SSML + TTS ───────────────────────────────────────────────────────
-def story_to_lines(story: str):
-    lines = []
-    for raw in story.splitlines():
-        if ":" in raw:
-            char, line = raw.split(":", 1)
-            lines.append((char.strip(), line.strip()))
-    return lines
+def upload(video_file, title, description): creds_data = json.loads(os.getenv("YT_CREDENTIALS")) creds = Credentials.from_authorized_user_info(creds_data) youtube = youtube_build("youtube", "v3", credentials=creds) request = youtube.videos().insert( part="snippet,status", body={ "snippet": { "title": title, "description": description, "tags": ["shorts", "emotional story", "sad story"], "categoryId": "22" }, "status": {"privacyStatus": "public"} }, media_body=MediaFileUpload(video_file) ) request.execute()
 
+def main(): print("🧠 Generating story …") story = generate_emotional_story() lines = split_lines(story)
 
-def lines_to_ssml(lines):
-    break_tag = '<break time="600ms"/>'
-    parts = []
-    for char, text in lines:
-        voice = CHAR_VOICES.get(char, CHAR_VOICES["Narrator"])
-        parts.append(f'<voice name="{voice}"><p>{text}</p></voice>')
-    return f"<speak>{break_tag.join(parts)}</speak>"
+print("🎙️  Synthesizing voices …")
+ssml_content = ssml(lines)
+voice_path = f"{OUT_DIR}/voice.mp3"
+tts(ssml_content, voice_path)
 
+print("🎞️  Rendering video …")
+video_path = f"{OUT_DIR}/final.mp4"
+render(VIDEO_FILE, voice_path, MUSIC_FILE, video_path)
 
-def tts(ssml_str, out_mp3):
-    # Write SSML to temporary file
-    ssml_file = "temp.ssml"
-    with open(ssml_file, "w") as f:
-        f.write(ssml_str)
-    subprocess.run(
-        [
-            "edge-tts",
-            "--file", ssml_file,
-            "--voice", "en-US-JennyNeural",
-            "--write-media", out_mp3,
-        ],
-        check=True,
-    )
-    os.remove(ssml_file)
+print("⬆️  Uploading …")
+upload(video_path, "LoreJump • Emotional Short", lines[0][1])
 
+if name == "main": main()
 
-def audio_len(mp3_path) -> float:
-    return float(
-        subprocess.check_output(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration",
-                "-of",
-                "default=nw=1:nk=1",
-                mp3_path,
-            ]
-        )
-        .decode()
-        .strip()
-    )
-
-
-# ── 3. VIDEO RENDERING ──────────────────────────────────────────────────
-def render(voice_mp3, duration, out_name):
-    clip = random.choice(PARKOUR_CLIPS)
-    out = os.path.join(OUT_DIR, out_name)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-stream_loop",
-            "-1",
-            "-i",
-            clip,
-            "-i",
-            voice_mp3,
-            "-i",
-            MUSIC,
-            "-t",
-            str(duration + 1),
-            "-filter_complex",
-            "[1:a]volume=1.4[a1];[2:a]volume=0.08[a2];[a1][a2]amix=inputs=2:duration=first[a]",
-            "-map",
-            "0:v",
-            "-map",
-            "[a]",
-            "-shortest",
-            out,
-        ],
-        check=True,
-    )
-    return out
-
-
-# ── 4. UPLOAD TO YOUTUBE ────────────────────────────────────────────────
-def upload(video_path, title, description):
-    creds_json = base64.b64decode(os.getenv("TOKEN_JSON")).decode()
-    creds = Credentials.from_authorized_user_info(
-        json.loads(creds_json), ["https://www.googleapis.com/auth/youtube.upload"]
-    )
-    yt = build("youtube", "v3", credentials=creds)
-    request = yt.videos().insert(
-        part="snippet,status",
-        body={
-            "snippet": {
-                "title": title,
-                "description": description,
-                "tags": ["shorts", "emotional", "voiceover"],
-                "categoryId": "22",
-            },
-            "status": {"privacyStatus": "public"},
-        },
-        media_body=MediaFileUpload(video_path),
-    )
-    resp = request.execute()
-    print("✅ Uploaded:", resp["id"])
-
-
-# ── 5. MAIN ─────────────────────────────────────────────────────────────
-def main():
-    print("🧠 Generating story …")
-    story_text = get_story()
-    lines = story_to_lines(story_text)
-    if not lines:
-        print("❌ No valid lines generated.")
-        return
-
-    print("🎙️  Synthesizing voices …")
-    voice_mp3 = os.path.join(OUT_DIR, "voice.mp3")
-    tts(lines_to_ssml(lines), voice_mp3)
-    dur = min(audio_len(voice_mp3), 60.0)
-
-    print("🎞️  Rendering video …")
-    video_path = render(voice_mp3, dur, "final.mp4")
-
-    print("⬆️  Uploading …")
-    upload(video_path, "LoreJump • Emotional Short", lines[0][1])
-
-    print("✅ All done:", datetime.utcnow())
-
-
-if __name__ == "__main__":
-    main()
