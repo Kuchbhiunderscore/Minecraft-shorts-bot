@@ -15,7 +15,7 @@ MUSIC_FILE = "music1.mp3"
 VIDEO_FILE = "parkour3.mp4"
 VOICES = ["en-US-JennyNeural", "en-US-GuyNeural", "en-GB-SoniaNeural"]
 
-Ensure output directory exists
+# Ensure output directory exists
 
 os.makedirs(OUT_DIR, exist_ok=True)
 
