@@ -19,14 +19,27 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # === 1. STORY GENERATION (placeholder text right now) ===
 
-def generate_story(part: int) -> str:
-    """Return the story text for <part> (placeholder)."""
-    with open(PROMPT_FILE, "r") as f:
-        base_prompt = f.read()
-    prompt = f"{base_prompt}\n\nWrite part {part} of the story:"
-    story = f"This is auto‑generated story Part {part}."  # <-- TODO: replace with real AI call
+import openai
+
+def generate_story(part):
+    openai.api_key = os.environ["OPENAI_API_KEY"]
+
+    base_prompt = "Write a short but emotional Minecraft story in 2 parts. Each part should be less than 400 characters. Add cliffhanger at end of Part 1."
+
+    if part == 1:
+        prompt = f"{base_prompt}\n\nGive me Part 1:"
+    else:
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{open('output/part1_story.txt').read()}\n\nNow write Part 2:"
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",  # or "gpt-4" if you're upgraded
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    story = response["choices"][0]["message"]["content"].strip()
     with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
         f.write(story)
+
     return story
 
 # === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
