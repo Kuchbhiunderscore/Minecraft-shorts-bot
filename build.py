@@ -47,9 +47,13 @@ def split_lines(text):
     return [(line.strip(), random.choice(VOICES)) for line in text.split('.') if line.strip()]
 
 def ssml(lines):
-    blocks = [f'<voice name="{v}"><p>{l}.</p></voice>' for l, v in lines]
-    body = "<break time='600ms'/>".join(blocks)
-    return f"<speak><prosody rate='85%' pitch='+3%'>{body}</prosody></speak>"
+    output = '<speak><prosody rate="85%" pitch="+3%">'
+    for line in lines:
+        if ":" in line[0]:  # Only if line is dialogue
+            _, dialogue = line[0].split(":", 1)  # Split and remove speaker name
+            output += f'<voice name="{line[1]}"><p>{dialogue.strip()}</p></voice><break time="600ms"/>'
+    output += '</prosody></speak>'
+    return output
 
 def tts(ssml_text, path):
     # Save SSML to a file
