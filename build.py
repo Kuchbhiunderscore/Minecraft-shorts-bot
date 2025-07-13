@@ -1,32 +1,201 @@
-import os import random import subprocess import json import base64 from datetime import datetime from google.oauth2.credentials import Credentials from googleapiclient.discovery import build from googleapiclient.http import MediaFileUpload import requests
+import os
+import random
+import subprocess
+import json
+import base64
+from datetime import datetime
 
-=== CONFIG ===
+import requests
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
-MUSIC = "music1.mp3" OUT_DIR = "output" PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)] CHAR_VOICES = { "Dad": "en-US-GuyNeural", "Son": "en-US-JennyNeural", "Sister": "en-US-AriaNeural", "Mom": "en-US-AnaNeural", "Narrator": "en-US-EmmaNeural" }
-
+# ── CONFIG ──────────────────────────────────────────────────────────────
+OUT_DIR = "output"
 os.makedirs(OUT_DIR, exist_ok=True)
 
-def get_story(): prompt = ( "Write a very short story under 5 sentences." " The story must be emotional or funny." " It must be real-life inspired, like about family, dad/son, sister/brother, rich/poor, sad or funny, etc." " Add clear speaking lines with character names before each line." " Example:\nDad: Where have you been?\nSon: Just playing outside.\n..." ) api_key = os.getenv("GEMINI_API_KEY") url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={api_key}" payload = {"contents": [{"parts": [{"text": prompt}]}]} res = requests.post(url, headers={"Content-Type": "application/json"}, json=payload) try: return res.json()['candidates'][0]['content']['parts'][0]['text'] except: print("⚠️  Gemini responded 404 :", res.text) return ( "Dad: Why are you late?\n" "Son: I was helping a homeless man.\n" "Dad: I’m proud of you.\n" "Son: He reminded me of Grandpa…\n" "Dad: Let's go give him dinner together." )
+MUSIC = "music1.mp3"                       # royalty-free bg music
+PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]
 
-def save_lines(part: int, story: str) -> list: lines = [] with open(f"{OUT_DIR}/part{part}.txt", "w") as f: for line in story.splitlines(): if ':' in line: role, line = line.split(':', 1) lines.append((role.strip(), line.strip())) f.write(f"{role.strip()}: {line.strip()}\n") return lines
+CHAR_VOICES = {                           # edge-tts voice map
+    "Dad": "en-US-GuyNeural",
+    "Mom": "en-US-JennyNeural",
+    "Brother": "en-US-DavisNeural",
+    "Sister": "en-US-AriaNeural",
+    "Narrator": "en-US-EmmaNeural"
+}
 
-def ssml(lines): parts = [] for role, line in lines: voice = CHAR_VOICES.get(role, CHAR_VOICES['Narrator']) parts.append(f"<voice name="{voice}"><p>{line}</p></voice>") return f"<speak>{''.join(parts)}</speak>"
+# ── 1. STORY GENERATION ─────────────────────────────────────────────────
+def get_story() -> str:
+    prompt = (
+        "Write an emotional or funny short story (40–60 seconds when spoken). "
+        "Use clear character labels: Dad:, Mom:, Brother:, Sister:, Narrator:. "
+        "Keep it under 600 characters. No Minecraft. Real-life themes — "
+        "family, rich-poor, friendships, sad or humorous twists."
+    )
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        print("⚠️  No GEMINI_API_KEY; using fallback story.")
+        return fallback_story()
+    url = (
+        "https://generativelanguage.googleapis.com/"
+        f"v1beta/models/gemini-pro:generateContent?key={key}"
+    )
+    res = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=60,
+    )
+    try:
+        return res.json()["candidates"][0]["content"]["parts"][0]["text"]
+    except Exception:
+        print("⚠️  Gemini failed, using fallback.")
+        return fallback_story()
 
-def tts(ssml_str, out): subprocess.run([ "edge-tts", "--ssml", ssml_str, "--voice", "en-US-JennyNeural", "--write-media", out ], check=True)
 
-def audio_len(mp3): return float(subprocess.check_output([ "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", mp3 ]).decode().strip())
+def fallback_story() -> str:
+    return (
+        "Dad: Why are you late?\n"
+        "Son: I gave my lunch to a homeless man.\n"
+        "Dad: Proud of you, kid.\n"
+        "Narrator: Sometimes missing a meal feeds the soul."
+    )
 
-def render(part: int, duration: float): clip = random.choice(PARKOUR_CLIPS) voice = f"{OUT_DIR}/p{part}.mp3" out = f"{OUT_DIR}/final{part}.mp4" subprocess.run([ "ffmpeg", "-y", "-i", clip, "-i", voice, "-i", MUSIC, "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=first:dropout_transition=2,volume=1.5[a]", "-map", "0:v", "-map", "[a]", "-t", str(duration), "-shortest", out ], check=True) return out
 
-def upload(video, title, descr): creds_json = base64.b64decode(os.getenv("TOKEN_JSON")).decode() creds = Credentials.from_authorized_user_info(json.loads(creds_json), ["https://www.googleapis.com/auth/youtube.upload"]) yt = build("youtube", "v3", credentials=creds) req = yt.videos().insert( part="snippet,status", body={ "snippet": { "title": title, "description": descr, "tags": ["shorts", "emotional", "story", "voiceover"], "categoryId": "22" }, "status": {"privacyStatus": "public"} }, media_body=MediaFileUpload(video) ) resp = req.execute() print("✅ Uploaded to YouTube:", resp['id'])
+# ── 2. SSML + TTS ───────────────────────────────────────────────────────
+def story_to_lines(story: str):
+    lines = []
+    for raw in story.splitlines():
+        if ":" in raw:
+            char, line = raw.split(":", 1)
+            lines.append((char.strip(), line.strip()))
+    return lines
 
-def main(): print("🧠 Making Part 1") part1_lines = save_lines(1, get_story()) tts(ssml(part1_lines), f"{OUT_DIR}/p1.mp3") print("🎬 Rendering + uploading Part 1") upload(render(1, audio_len(f"{OUT_DIR}/p1.mp3")), "LoreJump • Part 1", part1_lines[0][1])
 
-print("🧠 Making Part 2")
-part2_lines = save_lines(2, get_story())
-tts(ssml(part2_lines), f"{OUT_DIR}/p2.mp3")
-print("🎬 Rendering + uploading Part 2")
-upload(render(2, audio_len(f"{OUT_DIR}/p2.mp3")), "LoreJump • Part 2", part2_lines[0][1])
+def lines_to_ssml(lines):
+    break_tag = '<break time="600ms"/>'
+    parts = []
+    for char, text in lines:
+        voice = CHAR_VOICES.get(char, CHAR_VOICES["Narrator"])
+        parts.append(f'<voice name="{voice}"><p>{text}</p></voice>')
+    return f"<speak>{break_tag.join(parts)}</speak>"
 
-if name == "main": main()
 
+def tts(ssml_str, out_mp3):
+    # Write SSML to temporary file
+    ssml_file = "temp.ssml"
+    with open(ssml_file, "w") as f:
+        f.write(ssml_str)
+    subprocess.run(
+        [
+            "edge-tts",
+            "--file", ssml_file,
+            "--voice", "en-US-JennyNeural",
+            "--write-media", out_mp3,
+        ],
+        check=True,
+    )
+    os.remove(ssml_file)
+
+
+def audio_len(mp3_path) -> float:
+    return float(
+        subprocess.check_output(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=nw=1:nk=1",
+                mp3_path,
+            ]
+        )
+        .decode()
+        .strip()
+    )
+
+
+# ── 3. VIDEO RENDERING ──────────────────────────────────────────────────
+def render(voice_mp3, duration, out_name):
+    clip = random.choice(PARKOUR_CLIPS)
+    out = os.path.join(OUT_DIR, out_name)
+    subprocess.run(
+        [
+            "ffmpeg",
+            "-y",
+            "-stream_loop",
+            "-1",
+            "-i",
+            clip,
+            "-i",
+            voice_mp3,
+            "-i",
+            MUSIC,
+            "-t",
+            str(duration + 1),
+            "-filter_complex",
+            "[1:a]volume=1.4[a1];[2:a]volume=0.08[a2];[a1][a2]amix=inputs=2:duration=first[a]",
+            "-map",
+            "0:v",
+            "-map",
+            "[a]",
+            "-shortest",
+            out,
+        ],
+        check=True,
+    )
+    return out
+
+
+# ── 4. UPLOAD TO YOUTUBE ────────────────────────────────────────────────
+def upload(video_path, title, description):
+    creds_json = base64.b64decode(os.getenv("TOKEN_JSON")).decode()
+    creds = Credentials.from_authorized_user_info(
+        json.loads(creds_json), ["https://www.googleapis.com/auth/youtube.upload"]
+    )
+    yt = build("youtube", "v3", credentials=creds)
+    request = yt.videos().insert(
+        part="snippet,status",
+        body={
+            "snippet": {
+                "title": title,
+                "description": description,
+                "tags": ["shorts", "emotional", "voiceover"],
+                "categoryId": "22",
+            },
+            "status": {"privacyStatus": "public"},
+        },
+        media_body=MediaFileUpload(video_path),
+    )
+    resp = request.execute()
+    print("✅ Uploaded:", resp["id"])
+
+
+# ── 5. MAIN ─────────────────────────────────────────────────────────────
+def main():
+    print("🧠 Generating story …")
+    story_text = get_story()
+    lines = story_to_lines(story_text)
+    if not lines:
+        print("❌ No valid lines generated.")
+        return
+
+    print("🎙️  Synthesizing voices …")
+    voice_mp3 = os.path.join(OUT_DIR, "voice.mp3")
+    tts(lines_to_ssml(lines), voice_mp3)
+    dur = min(audio_len(voice_mp3), 60.0)
+
+    print("🎞️  Rendering video …")
+    video_path = render(voice_mp3, dur, "final.mp4")
+
+    print("⬆️  Uploading …")
+    upload(video_path, "LoreJump • Emotional Short", lines[0][1])
+
+    print("✅ All done:", datetime.utcnow())
+
+
+if __name__ == "__main__":
+    main()
