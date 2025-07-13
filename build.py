@@ -16,7 +16,9 @@ def generate_story(): prompt = "Write a very short, emotional story (under 500 c
 
 def split_lines(text): return [(line.strip(), random.choice(VOICES)) for line in text.split('.') if line.strip()]
 
-def ssml(lines): blocks = [f"<voice name="{v}"><p>{l}.</p></voice>" for l, v in lines] return f"<speak><prosody rate='85%' pitch='+3%'>{'<break time="600ms"/>'.join(blocks)}</prosody></speak>"
+def ssml(lines):
+    blocks = [f'<voice name="{v}"><p>{l}.</p></voice>' for l, v in lines]
+    return f"<speak><prosody rate='85%' pitch='+3%'>{'<break time=\"600ms\"/>'.join(blocks)}</prosody></speak>"
 
 def tts(ssml_text, path): subprocess.run([ "edge-tts", "--ssml", ssml_text, "--voice", "en-US-JennyNeural", "--write-media", path ], check=True)
 
