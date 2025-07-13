@@ -48,7 +48,15 @@ def generate_story(part):
     result = response.json()
 
     try:
-        story = result['candidates'][0]['content']['parts'][0]['text'].strip
+        story = result['candidates'][0]['content']['parts'][0]['text'].strip()
+    except Exception:
+        print("❌ Gemini error:", result)
+        story = "This is a fallback Minecraft story."
+
+    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
+        f.write(story)
+
+    return story
 # === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
 
 def tts(text: str, outfile: str):
