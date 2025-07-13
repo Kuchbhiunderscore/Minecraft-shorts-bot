@@ -16,45 +16,43 @@ OUT_DIR = "output"
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # === 1. STORY GENERATION (PaLM text-bison-001) ==============================
+import requests, os, json, textwrap
+
+def _call_palm(prompt: str) -> str:
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/"
+        f"models/text-bison-001:generateText?key={os.environ['GEMINI_API_KEY']}"
+    )
+    r = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"prompt": {"text": prompt}},
+        timeout=60,
+    )
+    try:
+        return r.json()["candidates"][0]["output"].strip()
+    except Exception:
+        print("❌ PaLM/Bison error:\n", textwrap.shorten(r.text, 400))
+        raise
+
 def generate_story(part: int) -> str:
     base_prompt = (
-        "Write a sad, emotional Minecraft story in TWO parts for YouTube Shorts. "
-        "Each part ≈ 200 words (NOT characters). Use simple language, short sentences, "
-        "and show, don't tell. Part 1 must end on a cliff-hanger; "
-        "Part 2 resolves it. Do NOT repeat Part 1 in Part 2."
+        "Write a sad, emotional Minecraft story in 2 parts. "
+        "Each part ≈ 200 words. Part 1 ends on a cliff-hanger; "
+        "Part 2 resolves it without repeating Part 1."
     )
 
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
         with open(f"{OUT_DIR}/part1_story.txt") as fp:
-            part1_text = fp.read()
-        prompt = (
-            f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
-        )
+            p1 = fp.read()
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{p1}\n\nNow give me Part 2:"
 
-    api_key = os.environ["GEMINI_API_KEY"]
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/text-bison-001:"
-        f"generateText?key={api_key}"
-    )
-    resp = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={"prompt": {"text": prompt}},
-        timeout=60,
-    )
-
-    if "application/json" in resp.headers.get("content-type", ""):
-        data = resp.json()
-        story = data["candidates"][0]["output"].strip()
-    else:
-        print("❌ PaLM API returned non-JSON\n", resp.text[:300])
-        raise RuntimeError("PaLM API error")
-
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as fp:
+    story = _call_palm(prompt)
+    out = f"{OUT_DIR}/part{part}_story.txt"
+    with open(out, "w") as fp:
         fp.write(story)
-
     return story
 
 # === 2. TEXT-TO-SPEECH (Edge TTS) ===========================================
