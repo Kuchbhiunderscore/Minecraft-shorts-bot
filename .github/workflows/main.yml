@@ -19,10 +19,10 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install ffmpeg -y
-          pip install google-api-python-client google-auth google-auth-oauthlib edge-tts
+  run: |
+    sudo apt-get update
+    sudo apt-get install ffmpeg -y
+    pip install openai pillow google-api-python-client google-auth google-auth-oauthlib edge-tts google-auth google-auth-oauthlib edge-tts
 
       - name: Run automation script
         run: python build.py
