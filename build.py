@@ -1,31 +1,25 @@
 import os
 import random
 import subprocess
-import json, base64
+import json
+import base64
 from datetime import datetime
-
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+import requests
 
-# === CONFIG ===
-MUSIC = "music1.mp3"                               # background track in assets/
-PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]  # pre‑recorded vertical clips
-OUT_DIR = "output"                                  # where finished files go
-PROMPT_FILE = "prompt.txt"                          # story prompt for the AI
+# === CONFIGURATION ===
+MUSIC = "music1.mp3"
+PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]
+OUT_DIR = "output"
+PROMPT_FILE = "prompt.txt"
 
 # === PREP ===
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# === 1. STORY GENERATION (placeholder text right now) ===
-
-import requests, os, json
-
-def generate_story(part: int) -> str:
-    """
-    Uses Gemini-pro to create the requested story part
-    and saves it to output/part{n}_story.txt.
-    """
+# === 1. STORY GENERATION (GEMINI) ===
+def generate_story(part):
     base_prompt = (
         "Write a short, emotional Minecraft story in 2 parts. "
         "Each part must be under 400 characters. Add a twist or cliffhanger in Part 1."
@@ -34,36 +28,36 @@ def generate_story(part: int) -> str:
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
-        with open(f"{OUT_DIR}/part1_story.txt") as fp:
-            p1 = fp.read()
-        prompt = f"{base_prompt}\n\nHere is Part 1:\n{p1}\n\nNow give me Part 2:"
+        try:
+            part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
+        except FileNotFoundError:
+            part1_text = "Steve was walking in the forest..."
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
 
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:"
-        f"generateContent?key={os.environ['GEMINI_API_KEY']}"
-    )
+    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    if not GEMINI_API_KEY:
+        raise Exception("❌ Missing GEMINI_API_KEY environment variable!")
 
-    resp = requests.post(
-        url,
-        headers={"Content-Type": "application/json"},
-        json={"contents": [{"parts": [{"text": prompt}]}]},
-        timeout=60,
-    )
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
+    headers = {"Content-Type": "application/json"}
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
 
-    data = resp.json()
+    response = requests.post(url, headers=headers, json=payload)
+    result = response.json()
+
     try:
-        story = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-    except Exception:
-        print("❌ Gemini response problem →", data)
-        story = "Steve looked at the sunset, unaware of the danger approaching..."
+        story = result['candidates'][0]['content']['parts'][0]['text'].strip()
+    except Exception as e:
+        print("❌ Error parsing Gemini response:", e)
+        print("🔁 Full response:", json.dumps(result, indent=2))
+        story = "Steve was walking in the forest... then everything changed."
 
-    os.makedirs(OUT_DIR, exist_ok=True)
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as fp:
-        fp.write(story)
+    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
+        f.write(story)
 
     return story
-# === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
 
+# === 2. TEXT-TO-SPEECH (Edge TTS) ===
 def tts(text: str, outfile: str):
     subprocess.run([
         "edge-tts",
@@ -73,20 +67,17 @@ def tts(text: str, outfile: str):
     ], check=True)
 
 # === 3. VIDEO COMPOSITION ===
-
 def render_video(part: int) -> str:
-    """Create the final MP4 for <part> and return its path."""
     clip = random.choice(PARKOUR_CLIPS)
     story_path = f"{OUT_DIR}/part{part}_story.txt"
     audio_path = f"{OUT_DIR}/part{part}_voice.mp3"
     output_path = f"{OUT_DIR}/LoreJump_Part{part}.mp4"
 
-    # 3a. voice‑over
     with open(story_path, "r") as f:
         text = f.read()
+
     tts(text, audio_path)
 
-    # 3b. merge video + voice + music
     subprocess.run([
         "ffmpeg", "-y",
         "-i", clip,
@@ -97,10 +88,10 @@ def render_video(part: int) -> str:
         "-shortest",
         output_path,
     ], check=True)
+
     return output_path
 
 # === 4. YOUTUBE UPLOAD ===
-
 def upload_video(path: str, title: str, descr: str, tags: list[str]):
     token_json = base64.b64decode(os.environ["TOKEN_JSON"]).decode()
     creds = Credentials.from_authorized_user_info(
@@ -115,7 +106,7 @@ def upload_video(path: str, title: str, descr: str, tags: list[str]):
                 "title": title,
                 "description": descr,
                 "tags": tags,
-                "categoryId": "20",  # Gaming
+                "categoryId": "20",
             },
             "status": {"privacyStatus": "public"},
         },
@@ -124,9 +115,7 @@ def upload_video(path: str, title: str, descr: str, tags: list[str]):
     resp = request.execute()
     print("✅ Uploaded to YouTube:", resp["id"])
 
-
-# === MAIN PIPELINE ===
-
+# === 5. MAIN PIPELINE ===
 def main():
     print("🧠 Generating stories …")
     generate_story(1)
@@ -138,7 +127,7 @@ def main():
     upload_video(
         part1_mp4,
         "LoreJump • Part 1",
-        "Auto‑uploaded via LoreJumpBot. Part 2 follows!",
+        "Auto-uploaded via LoreJumpBot. Part 2 follows!",
         ["minecraft", "shorts", "story", "parkour"],
     )
 
@@ -153,7 +142,6 @@ def main():
     )
 
     print("✅ Workflow finished:", datetime.utcnow())
-
 
 if __name__ == "__main__":
     main()
