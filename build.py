@@ -1,92 +1,77 @@
 import os
 import random
 import subprocess
+import json, base64
 from datetime import datetime
 
-# === CONFIG ===
-MUSIC = "music1.mp3"
-PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]
-OUT_DIR = "output"
-ASSETS_DIR = "assets"
-PROMPT_FILE = "prompt.txt"
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 
-# === CREATE OUTPUT FOLDER ===
+# === CONFIG ===
+MUSIC = "music1.mp3"                               # background track in assets/
+PARKOUR_CLIPS = [f"parkour{i}.mp4" for i in range(1, 6)]  # pre‑recorded vertical clips
+OUT_DIR = "output"                                  # where finished files go
+PROMPT_FILE = "prompt.txt"                          # story prompt for the AI
+
+# === PREP ===
 os.makedirs(OUT_DIR, exist_ok=True)
 
-# === GENERATE STORY (PART 1 & 2) ===
-def generate_story(part):
+# === 1. STORY GENERATION (placeholder text right now) ===
+
+def generate_story(part: int) -> str:
+    """Return the story text for <part> (placeholder)."""
     with open(PROMPT_FILE, "r") as f:
         base_prompt = f.read()
-
     prompt = f"{base_prompt}\n\nWrite part {part} of the story:"
-    response = f"This is auto-generated story Part {part}."  # placeholder
+    story = f"This is auto‑generated story Part {part}."  # <-- TODO: replace with real AI call
     with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
-        f.write(response)
-    return response
+        f.write(story)
+    return story
 
-# === TEXT TO SPEECH (USING PYTTSX3 OR EDGE TTS) ===
-def text_to_speech(text, output_file):
+# === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
+
+def tts(text: str, outfile: str):
     subprocess.run([
         "edge-tts",
         "--text", text,
         "--voice", "en-US-AriaNeural",
-        "--write-media", output_file
-    ])
+        "--write-media", outfile,
+    ], check=True)
 
-# === GENERATE VIDEO ===
-def combine_video(part):
+# === 3. VIDEO COMPOSITION ===
+
+def render_video(part: int) -> str:
+    """Create the final MP4 for <part> and return its path."""
     clip = random.choice(PARKOUR_CLIPS)
-    story_file = f"{OUT_DIR}/part{part}_story.txt"
-    audio_file = f"{OUT_DIR}/part{part}_voice.mp3"
-    output = f"{OUT_DIR}/LoreJump_Part{part}.mp4"
+    story_path = f"{OUT_DIR}/part{part}_story.txt"
+    audio_path = f"{OUT_DIR}/part{part}_voice.mp3"
+    output_path = f"{OUT_DIR}/LoreJump_Part{part}.mp4"
 
-    # Voice generation
-    with open(story_file, "r") as f:
-        story_text = f.read()
-    text_to_speech(story_text, audio_file)
+    # 3a. voice‑over
+    with open(story_path, "r") as f:
+        text = f.read()
+    tts(text, audio_path)
 
-    # Combine video + audio + music (simple)
+    # 3b. merge video + voice + music
     subprocess.run([
         "ffmpeg", "-y",
         "-i", clip,
-        "-i", audio_file,
+        "-i", audio_path,
         "-i", MUSIC,
         "-filter_complex", "[1:a][2:a]amix=inputs=2:duration=first[a]",
         "-map", "0:v", "-map", "[a]",
         "-shortest",
-        output
-    ])
-    return output
+        output_path,
+    ], check=True)
+    return output_path
 
-# === MAIN ===
-def main():
-    print("🧠 Generating story...")
-    part1 = generate_story(1)
-    part2 = generate_story(2)
+# === 4. YOUTUBE UPLOAD ===
 
-    print("🔊 Generating video for Part 1...")
-    combine_video(1)
-    print("🎥 Part 1 done.")
-
-    print("🔊 Generating video for Part 2...")
-    combine_video(2)
-    print("🎥 Part 2 done.")
-
-    print("✅ All done at", datetime.now())
-
-if __name__ == "__main__":
-    main()
-    
-from google.oauth2.credentials import Credentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaFileUpload
-import json, base64, os
-
-def upload_video(path, title, descr, tags):
+def upload_video(path: str, title: str, descr: str, tags: list[str]):
     token_json = base64.b64decode(os.environ["TOKEN_JSON"]).decode()
     creds = Credentials.from_authorized_user_info(
-        json.loads(token_json),
-        ["https://www.googleapis.com/auth/youtube.upload"]
+        json.loads(token_json), ["https://www.googleapis.com/auth/youtube.upload"]
     )
     youtube = build("youtube", "v3", credentials=creds)
 
@@ -97,13 +82,45 @@ def upload_video(path, title, descr, tags):
                 "title": title,
                 "description": descr,
                 "tags": tags,
-                "categoryId": "20"
+                "categoryId": "20",  # Gaming
             },
-            "status": {
-                "privacyStatus": "public"
-            }
+            "status": {"privacyStatus": "public"},
         },
-        media_body=MediaFileUpload(path)
+        media_body=MediaFileUpload(path),
     )
-    response = request.execute()
-    print("✅ Uploaded to YouTube:", response["id"])
+    resp = request.execute()
+    print("✅ Uploaded to YouTube:", resp["id"])
+
+
+# === MAIN PIPELINE ===
+
+def main():
+    print("🧠 Generating stories …")
+    generate_story(1)
+    generate_story(2)
+
+    print("🎬 Rendering Part 1 …")
+    part1_mp4 = render_video(1)
+    print("⬆️  Uploading Part 1 …")
+    upload_video(
+        part1_mp4,
+        "LoreJump • Part 1",
+        "Auto‑uploaded via LoreJumpBot. Part 2 follows!",
+        ["minecraft", "shorts", "story", "parkour"],
+    )
+
+    print("🎬 Rendering Part 2 …")
+    part2_mp4 = render_video(2)
+    print("⬆️  Uploading Part 2 …")
+    upload_video(
+        part2_mp4,
+        "LoreJump • Part 2",
+        "Thanks for watching Part 2!",
+        ["minecraft", "shorts", "story", "parkour"],
+    )
+
+    print("✅ Workflow finished:", datetime.utcnow())
+
+
+if __name__ == "__main__":
+    main()
