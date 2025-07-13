@@ -2,33 +2,29 @@ name: Build & Render LoreJump Shorts
 
 on:
   schedule:
-    - cron: "30 2 * * *"
-  workflow_dispatch:
+    - cron: '0 2 * * *'  # Runs daily at 07:30 AM IST (02:00 UTC)
+  workflow_dispatch:     # Allows manual trigger
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v4
       with:
-        python-version: "3.11"
+        python-version: 3.10
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install edge-tts
-
-    - name: Install FFmpeg
-      run: |
-        sudo apt update
-        sudo apt install -y ffmpeg
+        sudo apt-get update
+        sudo apt-get install ffmpeg -y
+        pip install google-api-python-client google-auth google-auth-oauthlib edge-tts
 
     - name: Run automation script
-  env:
-    TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
-  run: python build.py
+      run: python build.py
+      env:
+        TOKEN_JSON: ${{ secrets.TOKEN_JSON }}
