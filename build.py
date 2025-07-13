@@ -51,12 +51,16 @@ def ssml(lines: list[str]) -> str:
 
 # === TTS ===
 def tts(ssml_str: str, out: str):
+    ssml_path = "temp.ssml"
+    with open(ssml_path, "w") as f:
+        f.write(ssml_str)
     subprocess.run([
         "edge-tts",
-        "--ssml", ssml_str,
+        "--file", ssml_path,
         "--voice", "en-US-JennyNeural",
         "--write-media", out
     ], check=True)
+    os.remove(ssml_path)
 
 # === AUDIO LENGTH DETECTOR ===
 def audio_len(path: str) -> float:
