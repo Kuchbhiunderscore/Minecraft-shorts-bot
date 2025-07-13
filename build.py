@@ -1,5 +1,13 @@
-import os import random import subprocess import json from datetime import datetime from google.oauth2.credentials import Credentials from googleapiclient.discovery import build as youtube_build from googleapiclient.http import MediaFileUpload import requests
+import os
+import random
+import subprocess
+import json
+from datetime import datetime
 
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build as youtube_build
+from googleapiclient.http import MediaFileUpload
+import requests
 Constants
 
 OUT_DIR = "output" MUSIC_FILE = "music1.mp3" VIDEO_FILE = "parkour3.mp4" VOICES = ["en-US-JennyNeural", "en-US-GuyNeural", "en-GB-SoniaNeural"]
