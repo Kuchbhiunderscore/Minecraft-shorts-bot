@@ -19,10 +19,13 @@ os.makedirs(OUT_DIR, exist_ok=True)
 
 # === 1. STORY GENERATION (placeholder text right now) ===
 
-import requests
-import json
+import requests, os, json
 
-def generate_story(part):
+def generate_story(part: int) -> str:
+    """
+    Uses Gemini-pro to create the requested story part
+    and saves it to output/part{n}_story.txt.
+    """
     base_prompt = (
         "Write a short, emotional Minecraft story in 2 parts. "
         "Each part must be under 400 characters. Add a twist or cliffhanger in Part 1."
@@ -31,30 +34,32 @@ def generate_story(part):
     if part == 1:
         prompt = f"{base_prompt}\n\nGive me Part 1:"
     else:
-        part1_text = open(f"{OUT_DIR}/part1_story.txt").read()
-        prompt = f"{base_prompt}\n\nHere is Part 1:\n{part1_text}\n\nNow give me Part 2:"
+        with open(f"{OUT_DIR}/part1_story.txt") as fp:
+            p1 = fp.read()
+        prompt = f"{base_prompt}\n\nHere is Part 1:\n{p1}\n\nNow give me Part 2:"
 
-    GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+    url = (
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:"
+        f"generateContent?key={os.environ['GEMINI_API_KEY']}"
+    )
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={GEMINI_API_KEY}"
-    headers = {"Content-Type": "application/json"}
-    payload = {
-        "contents": [{
-            "parts": [{"text": prompt}]
-        }]
-    }
+    resp = requests.post(
+        url,
+        headers={"Content-Type": "application/json"},
+        json={"contents": [{"parts": [{"text": prompt}]}]},
+        timeout=60,
+    )
 
-    response = requests.post(url, headers=headers, json=payload)
-    result = response.json()
-
+    data = resp.json()
     try:
-        story = result['candidates'][0]['content']['parts'][0]['text'].strip()
+        story = data["candidates"][0]["content"]["parts"][0]["text"].strip()
     except Exception:
-        print("❌ Gemini error:", result)
-        story = "This is a fallback Minecraft story."
+        print("❌ Gemini response problem →", data)
+        story = "Steve looked at the sunset, unaware of the danger approaching..."
 
-    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as f:
-        f.write(story)
+    os.makedirs(OUT_DIR, exist_ok=True)
+    with open(f"{OUT_DIR}/part{part}_story.txt", "w") as fp:
+        fp.write(story)
 
     return story
 # === 2. TEXT‑TO‑SPEECH (Edge TTS) ===
